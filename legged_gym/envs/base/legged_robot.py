@@ -209,8 +209,7 @@ class LeggedRobot(BaseTask):
     def compute_observations(self):
         """ Computes observations
         """
-        self.obs_buf = torch.cat((  self.base_lin_vel * self.obs_scales.lin_vel,
-                                    self.base_ang_vel  * self.obs_scales.ang_vel,
+        self.obs_buf = torch.cat((  self.base_ang_vel  * self.obs_scales.ang_vel, #self.base_lin_vel * self.obs_scales.lin_vel,
                                     self.projected_gravity,
                                     self.commands[:, :3] * self.commands_scale,
                                     (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
@@ -220,7 +219,11 @@ class LeggedRobot(BaseTask):
         # add perceptive inputs if not blind
         if self.cfg.terrain.measure_heights:
             heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1, 1.) * self.obs_scales.height_measurements
-            self.obs_buf = torch.cat((self.obs_buf, heights), dim=-1)
+            if self.privileged_obs_buf is not None:
+                self.privileged_obs_buf = torch.cat((self.obs_buf, self.base_lin_vel * self.obs_scales.lin_vel, heights), dim=-1)
+            else:
+                self.obs_buf = torch.cat((self.obs_buf, self.base_lin_vel * self.obs_scales.lin_vel, heights), dim=-1)
+            # self.obs_buf = torch.cat((self.obs_buf, heights), dim=-1)
         # add noise if needed
         if self.add_noise:
             self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
@@ -841,7 +844,15 @@ class LeggedRobot(BaseTask):
     def _reward_dof_acc(self):
         # Penalize dof accelerations
         return torch.sum(torch.square((self.last_dof_vel - self.dof_vel) / self.dt), dim=1)
-    
+
+    def _reward_dof_power(self):
+        # Penalize dof power
+        return torch.sum(torch.abs(self.torques*self.dof_vel), dim=1)
+
+    def _reward_power_distribution(self):
+        # Penalize dof power distribution
+        return torch.var(torch.square(self.torques*self.dof_vel), dim=1)
+
     def _reward_action_rate(self):
         # Penalize changes in actions
         return torch.sum(torch.square(self.last_actions - self.actions), dim=1)

@@ -64,6 +64,12 @@ def play(args):
         export_policy_as_jit(ppo_runner.alg.actor_critic, path)
         print('Exported policy as jit script to: ', path)
 
+        onnx_path = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', train_cfg.runner.experiment_name, 'exported', 'onnx', 'actor.onnx')
+        if not os.path.exists(os.path.dirname(onnx_path)):
+            os.makedirs(os.path.dirname(onnx_path))
+        torch.onnx.export(ppo_runner.alg.actor_critic.actor, obs.detach(), onnx_path, verbose=True)
+        print('Exported actor policy as ONNX model to: ', onnx_path)
+
     logger = Logger(env.dt)
     robot_index = 0 # which robot is used for logging
     joint_index = 1 # which joint is used for logging
